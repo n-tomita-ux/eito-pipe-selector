@@ -71,6 +71,11 @@ tr.ng td{color:#BBBBBB}
 #sticky{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid #E5E5EA;padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;justify-content:center;align-items:baseline;gap:10px;font-size:13px;color:var(--color-sub);z-index:10}
 #sticky b{font-family:var(--font-en);font-size:22px;color:#0066CC}
 body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+.btn-primary{background:var(--color-accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.rec-item .head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--color-sub)}
+.rec-item .memo{font-weight:600;font-size:15px;margin:2px 0}
+.rec-item .sum{font-family:var(--font-en);font-size:14px}
+.rec-item .btns{display:flex;gap:8px;margin-top:10px}
 footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
 .note{font-size:12px;color:var(--color-sub);line-height:1.7}
 .tbl-wrap{overflow-x:auto}
@@ -88,6 +93,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
   <button data-t="sup" class="on">給水</button>
   <button data-t="drn">排水</button>
   <button data-t="hvac">空調配管</button>
+  <button data-t="rec" id="recTabBtn">記録</button>
   <button data-t="info">計算根拠</button>
 </div>
 
@@ -118,6 +124,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
     </div>
   </div>
   <div class="card" id="supResult"></div>
+  <div class="card recbar"><div class="row"><label class="f">メモ（任意）<input type="text" id="sMemo" placeholder="例：3F 男子トイレ 給水枝管"></label><div style="flex:0 0 auto"><button class="btn-primary" type="button" id="sRec">記録する</button></div></div><div class="hint" id="sRecMsg"></div></div>
 </section>
 
 <!-- ================= 排水 ================= -->
@@ -152,6 +159,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
     <div class="hint" id="drnHint"></div>
   </div>
   <div class="card" id="drnResult"></div>
+  <div class="card recbar"><div class="row"><label class="f">メモ（任意）<input type="text" id="dMemo" placeholder="例：2F 系統A 横枝管"></label><div style="flex:0 0 auto"><button class="btn-primary" type="button" id="dRec">記録する</button></div></div><div class="hint" id="dRecMsg"></div></div>
 </section>
 
 <!-- ================= 空調配管 ================= -->
@@ -190,6 +198,13 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
     </div>
   </div>
   <div class="card" id="hvResult"></div>
+  <div class="card recbar"><div class="row"><label class="f">メモ（任意）<input type="text" id="hMemo" placeholder="例：AHU-1 冷温水 往還"></label><div style="flex:0 0 auto"><button class="btn-primary" type="button" id="hRec">記録する</button></div></div><div class="hint" id="hRecMsg"></div></div>
+</section>
+
+<!-- ================= 記録 ================= -->
+<section id="tab-rec" class="hidden">
+  <div id="recList"></div>
+  <div class="note" style="margin:4px 4px 12px">記録は最大10件。11件目を記録すると一番古いものから消えます。記録はアプリを開いている間だけ残り、再読み込みやタブを閉じると消えます。</div>
 </section>
 
 <!-- ================= 計算根拠 ================= -->
@@ -198,7 +213,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
 </section>
 
 <div id="sticky"></div>
-<footer>配管サイズ選定｜栄都工業　Rev01-20261110　©2026 Eito Kogyo</footer>
+<footer>配管サイズ選定｜栄都工業　Rev02-20261111　©2026 Eito Kogyo</footer>
 </div>
 
 <script>
@@ -362,8 +377,9 @@ function segBind(id, attr, cb){
 }
 var curTab = null;
 curTab = segBind('mainTabs','t', t => {
-  ['sup','drn','hvac','info'].forEach(k => $('tab-'+k).classList.toggle('hidden', k !== t));
-  $('sticky').classList.toggle('hidden', t === 'info');
+  ['sup','drn','hvac','rec','info'].forEach(k => $('tab-'+k).classList.toggle('hidden', k !== t));
+  $('sticky').classList.toggle('hidden', t === 'info' || t === 'rec');
+  if (t === 'rec') renderRec();
   $('sticky').innerHTML = STICKY[t] || '';
   window.scrollTo(0,0);
 });
@@ -515,6 +531,59 @@ $('infoBody').innerHTML = `
 <h2 style="margin-top:14px">注意</h2>
 <p>・目安を出すためのツール。設計図・特記仕様書・元請の指示があればそちらを優先する。</p>
 <p>・表の数値はマスタ（MASTER）で管理。社内基準に合わせて冨田が更新する。</p>`;
+
+/* ---------- 記録（メモリ上のみ・最大10件） ---------- */
+const REC_MAX = 10;
+let REC = [];
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KIND = {
+  s: { tab:'sup',  name:'給水',     el:'supResult', ids:['sUse','sCurve','sQ','sPipe','sR','sV'] },
+  d: { tab:'drn',  name:'排水',     el:'drnResult', ids:['dU','dWc','dU1','dSlope'] },
+  h: { tab:'hvac', name:'空調配管', el:'hvResult',  ids:['hQ','hKw','hDt','hPipe','hR','hV'] }
+};
+function updRecTab(){ $('recTabBtn').textContent = '記録（' + REC.length + '/' + REC_MAX + '）'; }
+function segSet(id, attr, val){ const b = $(id).querySelector(`button[data-${attr}="${val}"]`); if (b) b.click(); }
+function recTitle(k){
+  if (k === 's') return supMode() === 'fx' ? '器具から' : ('流量 ' + $('sQ').value + ' L/min');
+  if (k === 'd') return PART_LABEL[drnPart()];
+  return SYS_LABEL[hvSys()] + '　' + (hvMode() === 'kw' ? $('hKw').value + ' kW・Δt' + $('hDt').value + '℃' : $('hQ').value + ' L/min');
+}
+function addRec(k){
+  const K = KIND[k], sum = ($('sticky').textContent || '').trim();
+  const ok = $(K.el).querySelector('.kv.hl');
+  if (!ok){ $(k+'RecMsg').textContent = '計算結果がないので記録できません。'; return; }
+  const now = new Date(), t = now.getFullYear()+'/'+(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const inputs = {}; K.ids.forEach(id => inputs[id] = $(id).value);
+  const r = { t, k, inputs, memo: $(k+'Memo').value.trim(), title: recTitle(k), sum,
+    seg: k==='s' ? { mode: supMode() } : k==='d' ? { mode: drnMode(), part: drnPart() } : { sys: hvSys(), mode: hvMode() },
+    counts: k==='s' ? sFx.counts() : k==='d' ? dFx.counts() : null };
+  REC.unshift(r); const drop = REC.length > REC_MAX; if (drop) REC.length = REC_MAX;
+  $(k+'RecMsg').textContent = '記録しました（' + REC.length + '/' + REC_MAX + '）' + (drop ? '。一番古い記録を消しました' : '');
+  $(k+'Memo').value = '';
+  updRecTab();
+}
+function renderRec(){
+  const el = $('recList'); updRecTab();
+  if (!REC.length){ el.innerHTML = '<div class="card note">まだ記録はありません。給水・排水・空調配管の結果の下にある「記録する」で残せます。</div>'; return; }
+  el.innerHTML = REC.map((r,i) => `<div class="card rec-item"><div class="head"><span>${KIND[r.k].name}｜${esc(r.title)}</span><span>${esc(r.t)}</span></div>${r.memo ? `<div class="memo">${esc(r.memo)}</div>` : ''}<div class="sum">${esc(r.sum)}</div><div class="btns"><button class="btn-primary" type="button" data-load="${i}">呼び出す</button><button class="btn-secondary" type="button" data-del="${i}">削除</button></div></div>`).join('')
+    + '<div style="text-align:right;margin-bottom:12px"><button class="btn-secondary" type="button" id="recClear">記録をすべて削除</button></div>';
+  el.querySelectorAll('[data-load]').forEach(b => b.onclick = () => loadOne(REC[+b.dataset.load]));
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { REC.splice(+b.dataset.del, 1); renderRec(); });
+  $('recClear').onclick = () => { if ($('recClear').dataset.ok){ REC = []; renderRec(); } else { $('recClear').dataset.ok = '1'; $('recClear').textContent = 'もう一度押すと全部消えます'; } };
+}
+function setCounts(listId, counts){ if (!counts) return; $(listId).querySelectorAll('.fx input').forEach((inp,i) => inp.value = counts[i] || 0); }
+function loadOne(r){
+  const K = KIND[r.k];
+  segSet('mainTabs', 't', K.tab);
+  if (r.k === 's'){ segSet('supMode','m', r.seg.mode); setCounts('sFxList', r.counts); }
+  if (r.k === 'd'){ segSet('drnMode','m', r.seg.mode); segSet('drnPart','p', r.seg.part); setCounts('dFxList', r.counts); }
+  if (r.k === 'h'){ segSet('hvSys','s', r.seg.sys); segSet('hvMode','m', r.seg.mode); }
+  Object.entries(r.inputs).forEach(([id,v]) => { if ($(id)) $(id).value = v; });
+  if (r.k === 's') calcSup(); else if (r.k === 'd') calcDrn(); else calcHv();
+  window.scrollTo(0,0);
+}
+$('sRec').onclick = () => addRec('s'); $('dRec').onclick = () => addRec('d'); $('hRec').onclick = () => addRec('h');
+updRecTab();
 
 calcSup(); calcDrn(); calcHv();
 </script>
