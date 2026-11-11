@@ -133,6 +133,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
       <label class="f">用途<select id="sUse"><option value="pub">公衆用（事務所など）</option><option value="pri">私室用（住宅など）</option></select></label>
       <label class="f">大便器の洗浄方式<select id="sCurve"><option value="fv">洗浄弁が多い</option><option value="tk">洗浄タンクが多い</option></select></label>
     </div>
+    <div style="margin-bottom:10px"><button class="btn-secondary" type="button" id="sCopy">⇄ 排水の器具からコピー</button><div class="hint" id="sCopyMsg"></div></div>
     <div class="fx-list" id="sFxList"></div>
     <div style="margin-top:10px"><button class="btn-secondary" type="button" id="sClear">個数をすべて0にする</button></div>
   </div>
@@ -159,6 +160,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
   </div>
   <div class="card drn-fx">
     <h2>器具と個数</h2>
+    <div style="margin-bottom:10px"><button class="btn-secondary" type="button" id="dCopy">⇄ 給水の器具からコピー</button><div class="hint" id="dCopyMsg"></div></div>
     <div class="fx-list" id="dFxList"></div>
     <div style="margin-top:10px"><button class="btn-secondary" type="button" id="dClear">個数をすべて0にする</button></div>
   </div>
@@ -237,7 +239,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
 </section>
 
 <div id="sticky"></div>
-<footer>配管サイズ選定｜栄都工業　Rev03-20261111　©2026 Eito Kogyo</footer>
+<footer>配管サイズ選定｜栄都工業　Rev04-20261111　©2026 Eito Kogyo</footer>
 </div>
 
 <script>
@@ -290,6 +292,7 @@ const MASTER = {
     ['手洗器', 0.5, false],
     ['台所流し（住宅）', 2, false],
     ['調理用流し（業務用）', 4, false],
+    ['事務用流し', 2, false],
     ['掃除用流し', 3, false],
     ['浴槽', 2, false],
     ['シャワー', 2, false],
@@ -691,6 +694,45 @@ Q：流量[㎥/s]、D：内径[m]、C：流速係数（管の内面のなめら�
 <li>給水の末端は接続口径、排水は器具の排水口径より細くしない。</li>
 <li>迷ったら「計算の流れを見る」を開いて、どこで決まったのかを確認し、先輩に相談する。</li></ul>
 </div></details>`;
+
+/* ---------- 器具の個数を給水⇔排水でコピー ---------- */
+// 給水の器具名 → 排水の器具名（台所流しは用途で切替）
+function supToDrnName(nm){
+  if (nm.startsWith('大便器')) return '大便器';
+  if (nm.startsWith('小便器')) return '小便器';
+  if (nm === '台所流し') return $('sUse').value === 'pri' ? '台所流し（住宅）' : '調理用流し（業務用）';
+  if (nm === '洗濯機用水栓') return '洗濯機';
+  return ['洗面器','手洗器','事務用流し','掃除用流し','浴槽','シャワー'].includes(nm) ? nm : null;
+}
+// 排水の器具名 → 給水の器具名（大便器・小便器は給水タブの洗浄方式に合わせる）
+function drnToSupName(nm){
+  const fv = $('sCurve').value === 'fv';
+  if (nm === '大便器') return fv ? '大便器（洗浄弁）' : '大便器（洗浄タンク）';
+  if (nm === '小便器') return fv ? '小便器（洗浄弁）' : '小便器（洗浄タンク）';
+  if (nm === '台所流し（住宅）' || nm === '調理用流し（業務用）') return '台所流し';
+  if (nm === '洗濯機') return '洗濯機用水栓';
+  return ['洗面器','手洗器','事務用流し','掃除用流し','浴槽','シャワー'].includes(nm) ? nm : null;
+}
+function copyFixtures(fromItems, fromCounts, toItems, toListId, mapFn, msgId, fromLabel, after){
+  const to = new Array(toItems.length).fill(0), skipped = [];
+  let n = 0;
+  fromItems.forEach((it, i) => {
+    if (!fromCounts[i]) return;
+    const j = toItems.findIndex(x => x[0] === mapFn(it[0]));
+    if (j < 0) { skipped.push(`${it[0]}×${fromCounts[i]}`); return; }
+    to[j] += fromCounts[i]; n += fromCounts[i];
+  });
+  if (!n) { $(msgId).textContent = `${fromLabel}にコピーできる器具がありません（今の個数はそのまま）。` + (skipped.length ? `対応する器具がない：${skipped.join('、')}` : ''); return; }
+  $(toListId).querySelectorAll('.fx input').forEach((inp, i) => inp.value = to[i]);
+  $(msgId).textContent = `${fromLabel}から${n}個コピーしました（入っていた個数は上書き）。` + (skipped.length ? `対応する器具がないため飛ばした：${skipped.join('、')}` : '');
+  after();
+}
+$('sCopy').onclick = () => {
+  copyFixtures(MASTER.drnFixtures, dFx.counts(), MASTER.supFixtures, 'sFxList', drnToSupName, 'sCopyMsg', '排水', () => { segSet('supMode','m','fx'); calcSup(); });
+  const hidden = MASTER.supFixtures.map((it,i) => ({it, c: sFx.counts()[i]})).filter(x => x.c && ($('sUse').value === 'pub' ? x.it[1] : x.it[2]) === 0);
+  if (hidden.length) $('sCopyMsg').textContent += `　※${hidden.map(x => x.it[0]).join('・')}は今の用途では使わない器具なので計算に入りません。`;
+};
+$('dCopy').onclick = () => copyFixtures(MASTER.supFixtures, sFx.counts(), MASTER.drnFixtures, 'dFxList', supToDrnName, 'dCopyMsg', '給水', () => { segSet('drnMode','m','fx'); calcDrn(); });
 
 /* ---------- 記録（メモリ上のみ・最大10件） ---------- */
 const REC_MAX = 10;
