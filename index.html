@@ -76,6 +76,30 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 .rec-item .memo{font-weight:600;font-size:15px;margin:2px 0}
 .rec-item .sum{font-family:var(--font-en);font-size:14px}
 .rec-item .btns{display:flex;gap:8px;margin-top:10px}
+.steps{margin-top:14px;border-top:1px solid #EEEEEE;padding-top:10px}
+.steps summary{cursor:pointer;color:var(--color-accent);font-weight:600;font-size:14px;list-style:none;padding:4px 0}
+.steps summary::-webkit-details-marker{display:none}
+.steps summary::before{content:'▶ ';font-size:11px}
+.steps[open] summary::before{content:'▼ '}
+.step{background:var(--color-bg);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:13px;line-height:1.75}
+.step .st-h{font-weight:700;font-size:13px;margin-bottom:2px}
+.step .st-h span{display:inline-block;background:var(--color-accent);color:#fff;border-radius:20px;font-size:11px;padding:0 8px;margin-right:6px}
+.step .f{font-family:var(--font-en);background:var(--color-white);border-radius:6px;padding:4px 8px;margin:4px 0;display:block;overflow-x:auto;white-space:nowrap}
+.step .why{color:#6D5000;background:var(--color-yellow);border-radius:6px;padding:4px 8px;margin-top:4px}
+.step ul{margin:2px 0;padding-left:18px}
+.learn details{background:var(--color-white);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:10px;padding:0 18px}
+.learn summary{cursor:pointer;font-weight:700;font-size:15px;padding:14px 0;list-style:none}
+.learn summary::-webkit-details-marker{display:none}
+.learn summary::after{content:'＋';float:right;color:var(--color-accent)}
+.learn details[open] summary::after{content:'−'}
+.learn .body{padding-bottom:14px;font-size:14px;line-height:1.85}
+.learn h3{font-size:14px;margin:14px 0 4px;color:#0066CC}
+.learn .f{font-family:var(--font-en);background:var(--color-bg);border-radius:6px;padding:6px 10px;margin:6px 0;display:block;overflow-x:auto}
+.learn table{font-size:13px;margin:6px 0}
+.learn .exam{background:var(--color-purple);border-radius:8px;padding:10px 12px;margin-top:12px}
+.learn .exam b{color:#6A1B9A}
+.learn .tip{background:var(--color-green);border-radius:8px;padding:10px 12px;margin-top:10px}
+.learn .intro{background:var(--color-white);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;margin-bottom:10px;font-size:14px;line-height:1.8}
 footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
 .note{font-size:12px;color:var(--color-sub);line-height:1.7}
 .tbl-wrap{overflow-x:auto}
@@ -94,7 +118,7 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
   <button data-t="drn">排水</button>
   <button data-t="hvac">空調配管</button>
   <button data-t="rec" id="recTabBtn">記録</button>
-  <button data-t="info">計算根拠</button>
+  <button data-t="info">解説</button>
 </div>
 
 <!-- ================= 給水 ================= -->
@@ -207,13 +231,13 @@ footer{text-align:center;font-size:11px;color:var(--color-sub);margin-top:16px}
   <div class="note" style="margin:4px 4px 12px">記録は最大10件。11件目を記録すると一番古いものから消えます。記録はアプリを開いている間だけ残り、再読み込みやタブを閉じると消えます。</div>
 </section>
 
-<!-- ================= 計算根拠 ================= -->
+<!-- ================= 解説 ================= -->
 <section id="tab-info" class="hidden">
-  <div class="card note" id="infoBody"></div>
+  <div class="learn" id="infoBody"></div>
 </section>
 
 <div id="sticky"></div>
-<footer>配管サイズ選定｜栄都工業　Rev02-20261111　©2026 Eito Kogyo</footer>
+<footer>配管サイズ選定｜栄都工業　Rev03-20261111　©2026 Eito Kogyo</footer>
 </div>
 
 <script>
@@ -338,7 +362,7 @@ function sizeTable(qLmin, pipeKey, Rmax, Vmax){
 }
 const STICKY = {};
 function setSticky(tab, html){ STICKY[tab] = html; if (curTab && curTab() === tab) $('sticky').innerHTML = html; }
-function renderSizeResult(el, qLmin, pipeKey, Rmax, Vmax, extraKv, tab){
+function renderSizeResult(el, qLmin, pipeKey, Rmax, Vmax, extraKv, tab, preSteps){
   if (!(qLmin > 0)){ el.innerHTML = '<div class="hint">流量を入れてください。</div>'; setSticky(tab, '流量を入れてください'); return; }
   const t = sizeTable(qLmin, pipeKey, Rmax, Vmax);
   const b = t.best;
@@ -362,7 +386,50 @@ function renderSizeResult(el, qLmin, pipeKey, Rmax, Vmax, extraKv, tab){
   });
   h += '</table></div>';
   h += `<div class="hint">${t.pipe.name}／C=${t.pipe.C}（ヘーゼン・ウィリアムス式）。緑の行が選定管径。</div>`;
+  const pre = preSteps || [];
+  h += stepsBox(tab, pre.join('') + pipeSteps(pre.length + 1, qLmin, t, Rmax, Vmax));
   el.innerHTML = h;
+}
+
+/* ---------- 計算の流れ（学習用） ---------- */
+const OPEN = {};  // 「計算の流れを見る」を開いたままにする
+function stepsBox(tab, inner){
+  return `<details class="steps" data-tab="${tab}"${OPEN[tab] ? ' open' : ''}><summary>計算の流れを見る</summary>${inner}</details>`;
+}
+document.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('steps')) OPEN[d.dataset.tab] = d.open; }, true);
+const dec = x => { if (!isFinite(x)) return '−'; const n = Math.max(2, 3 - Math.floor(Math.log10(Math.abs(x)))); return x.toFixed(Math.min(n, 9)); };  // 指数表記を使わず有効数字4桁
+const stepH = (n, t) => `<div class="st-h"><span>STEP ${n}</span>${t}</div>`;
+// 管径の判定（ヘーゼン・ウィリアムス式）を、実際の数字で説明
+function pipeSteps(n0, qLmin, t, Rmax, Vmax){
+  const p = t.pipe, b = t.best;
+  const Q = qLmin / 60000;
+  let h = `<div class="step">${stepH(n0,'流量を計算で使う単位にする')}
+    <span class="f">Q = ${fmt(qLmin,1)} L/min ÷ 60,000 = ${dec(Q)} ㎥/s</span>
+    1分あたりのリットルを、1秒あたりの立方メートルに直します（1㎥＝1,000L、1分＝60秒）。</div>`;
+  const bi = b ? t.rows.findIndex(r => r.nm === b.nm) : t.rows.length;
+  const tries = t.rows.slice(Math.max(0, bi - 1), bi + 1);
+  tries.forEach((r, k) => {
+    const D = r.d / 1000, A = Math.PI * D * D / 4;
+    const ng = [];
+    if (r.v > Vmax) ng.push(`流速 ${fmt(r.v,2)} m/s が上限 ${fmt(Vmax,1)} m/s を超える`);
+    if (r.R > Rmax) ng.push(`摩擦損失 ${fmt(r.R,0)} Pa/m が上限 ${fmt(Rmax,0)} Pa/m を超える`);
+    h += `<div class="step">${stepH(n0 + 1 + k, `${r.nm}（内径 ${fmt(r.d,1)} mm）で確認`)}
+      ① 管の断面積<span class="f">A = π × D² ÷ 4 = 3.1416 × ${D.toFixed(4)}² ÷ 4 = ${dec(A)} ㎡</span>
+      ② 流速（水が進む速さ）<span class="f">v = Q ÷ A = ${dec(Q)} ÷ ${dec(A)} = ${fmt(r.v,2)} m/s</span>
+      ③ 摩擦損失（管1mあたりの圧力の減り方）<span class="f">h = 10.67 × Q^1.852 ÷ (C^1.852 × D^4.87) = 10.67 × ${dec(Q)}^1.852 ÷ (${p.C}^1.852 × ${D.toFixed(4)}^4.87)<br>　= ${dec((r.R/9806.65))} m/m → × 9,806.65 = ${fmt(r.R,0)} Pa/m</span>
+      ${ng.length ? `<div class="why">✕ ${ng.join('、')}ので、1サイズ太くします。</div>`
+                  : `<div class="tip" style="margin-top:4px;padding:4px 8px">○ 流速・摩擦損失とも上限以内。この太さで決まり。</div>`}</div>`;
+  });
+  if (!b) h += `<div class="step"><div class="why">この管種の一番太い管でも上限を超えます。系統を分けて流量を減らすか、上限を見直してください。</div></div>`;
+  return h;
+}
+function curveSteps(curveKey, U, q){
+  const c = MASTER.curves[curveKey];
+  let i = c.findIndex(x => x[0] >= U); if (i <= 0) i = Math.max(1, i < 0 ? c.length - 1 : 1);
+  const [u0,q0] = c[i-1], [u1,q1] = c[i];
+  return `曲線「${curveKey === 'fv' ? '洗浄弁が多い' : '洗浄タンクが多い'}」の表の点（${u0}単位→${q0} L/min）と（${u1}単位→${q1} L/min）の間を読み取ります（グラフが対数目盛なので、対数で比例配分）。
+    <span class="f">負荷単位 ${fmt(U,1)} → 同時使用流量 ${fmt(q,1)} L/min</span>
+    器具を全部同時に使うことはないので、「実際に同時に流れる量」は単純な合計より少なくなります。この曲線がその割り引きをしています。`;
 }
 
 /* ---------- タブ切替 ---------- */
@@ -420,20 +487,23 @@ const sFx = buildFx('sFxList', MASTER.supFixtures, i => {
 }, () => calcSup());
 function calcSup(){
   sFx.refresh();
-  let q, kv = '';
+  let q, kv = '', pre = [];
   if (supMode() === 'fx'){
     const pub = $('sUse').value === 'pub';
     const c = sFx.counts();
     let U = 0, n = 0;
     MASTER.supFixtures.forEach((it, i) => { const u = pub ? it[1] : it[2]; if (u) { U += u * c[i]; n += c[i]; } });
     q = curveQ(MASTER.curves[$('sCurve').value], U);
+    const lines = MASTER.supFixtures.map((it, i) => { const u = pub ? it[1] : it[2]; return (u && c[i]) ? `<li>${it[0]}：${u} × ${c[i]}個 = ${fmt(u*c[i],1)}</li>` : ''; }).join('');
+    pre = [`<div class="step">${stepH(1,'器具給水負荷単位を合計する')}器具ごとの「水をどれだけ使うかの重み」（${pub ? '公衆用' : '私室用'}の値）に個数を掛けて足します。<ul>${lines}</ul><span class="f">合計 U = ${fmt(U,1)}</span></div>`,
+           `<div class="step">${stepH(2,'同時使用流量を読み取る')}${curveSteps($('sCurve').value, U, q)}</div>`];
     kv = `<div class="kv"><div class="k">器具数／負荷単位</div><div class="v">${n}<small>個</small> ${fmt(U,1)}</div></div>`
        + `<div class="kv"><div class="k">同時使用流量</div><div class="v">${fmt(q,0)}<small>L/min</small></div></div>`;
     if (U === 0){ $('supResult').innerHTML = '<div class="hint">器具の個数を＋で入れてください。</div>'; setSticky('sup','器具の個数を＋で入れてください'); return; }
   } else {
     q = num('sQ');
   }
-  renderSizeResult($('supResult'), q, $('sPipe').value, num('sR',300), num('sV',2), kv, 'sup');
+  renderSizeResult($('supResult'), q, $('sPipe').value, num('sR',300), num('sV',2), kv, 'sup', pre);
 }
 fillPipes('sPipe','sup');
 ['sUse','sCurve','sPipe','sQ','sR','sV'].forEach(id => $(id).addEventListener('input', calcSup));
@@ -489,6 +559,26 @@ function calcDrn(){
   });
   h += '</table></div>';
   h += '<div class="hint">排水管は下流に向かって管径を小さくしない。横枝管は接続する器具排水管の最大径以上とする。</div>';
+  let st = '';
+  if (drnMode() === 'fx'){
+    const c = dFx.counts();
+    const lines = MASTER.drnFixtures.map((it, i) => c[i] ? `<li>${it[0]}：${it[1]} × ${c[i]}個 = ${fmt(it[1]*c[i],1)}</li>` : '').join('');
+    st += `<div class="step">${stepH(1,'器具排水負荷単位を合計する')}器具ごとの「排水の多さの重み」に個数を掛けて足します。<ul>${lines}</ul><span class="f">合計 = ${fmt(U,1)}</span></div>`;
+  } else {
+    st += `<div class="step">${stepH(1,'器具排水負荷単位')}入力された合計 ${fmt(U,1)} を使います。</div>`;
+  }
+  const capTxt = p === 'bd' ? `排水横主管・勾配${MASTER.drnSlopeLabel[slope]}` : PART_LABEL[p];
+  st += `<div class="step">${stepH(2,`「${capTxt}」の許容負荷単位の表と比べる`)}管径ごとに「流してよい負荷単位の上限」が決まっています。合計 ${fmt(U,1)} 以上の上限を持つ、いちばん細い管を探します。<ul>`
+     + rows.filter(x => x.c != null).slice(0, best ? rows.findIndex(x => x.r.d === best.d) + 1 : rows.length).map(x =>
+         `<li>${x.r.d}mm：上限 ${x.c.toLocaleString()} → ${x.ok ? '<b>○ 収まる</b>' : (x.note ? '✕ ' + x.note : '✕ 足りない')}</li>`).join('') + '</ul></div>';
+  const rules = [];
+  if (wc > 0) rules.push('大便器がつながるので75mm以上（大便器の器具排水管は75mmが最小。汚物が詰まらないように）。');
+  if (wc > 2) rules.push('75mmにつなげる大便器は2個まで。3個以上なので100mm以上。');
+  if (p === 'stH') rules.push('3階建を超える立て管は、1本全体の合計と、1階分（1ブランチ）から流れ込む量の両方を確認する。');
+  if (p === 'st3' || p === 'stH') rules.push('立て管は、いちばん下の階で必要な太さで上から下まで同じ径にする（途中で細くしない）。');
+  if (rules.length) st += `<div class="step">${stepH(3,'ルールによる最小径の確認')}<ul>${rules.map(x => '<li>' + x + '</li>').join('')}</ul></div>`;
+  if (best) st += `<div class="step"><div class="tip" style="padding:4px 8px">○ 結果：${PART_LABEL[p]}は <b>${best.d}mm</b>。${p !== 'st3' && p !== 'stH' ? '勾配の目安は ' + MASTER.drnMinSlope.find(x => best.d <= x[0])[1] + ' 以上。' : ''}</div></div>`;
+  h += stepsBox('drn', st);
   $('drnResult').innerHTML = h;
   $('drnHint').textContent = { br:'器具から立て管までの横引き。', st3:'建物が3階建以下のときの立て管。', stH:'3階建を超えるとき。1本の合計と、1階分の負荷単位の両方で確認。', bd:'立て管から屋外までの横主管。勾配を選ぶ。' }[p];
 }
@@ -500,37 +590,107 @@ const SYS_LABEL = { cw:'冷水', hw:'温水', chw:'冷温水', ct:'冷却水' };
 const hvSys = segBind('hvSys','s', s => { $('hDt').value = MASTER.hvacDt[s]; calcHv(); });
 const hvMode = segBind('hvMode','m', m => { document.querySelector('.hv-q').classList.toggle('hidden', m!=='q'); document.querySelector('.hv-kw').classList.toggle('hidden', m!=='kw'); calcHv(); });
 function calcHv(){
-  let q, kv = '';
+  let q, kv = '', pre = [];
   const s = hvSys();
   if (hvMode() === 'kw'){
     const kw = num('hKw'), dt = num('hDt');
     q = dt > 0 ? kw / (4.186 * dt) * 60 : 0;   // L/min（水の密度1kg/L）
     $('hKwHint').textContent = `流量 = ${fmt(kw,1)} kW ÷ (4.186 × ${fmt(dt,1)} ℃) × 60 = ${fmt(q,1)} L/min（${fmt(q*0.06,2)} ㎥/h）` + (s==='ct' ? '　※冷却水は凝縮器の放熱量（冷凍能力＋圧縮機の入力）で入れる' : '');
+    pre = [`<div class="step">${stepH(1,'熱量から流量を出す')}水が運ぶ熱は「流量 × 比熱 × 温度差」。これを流量について解きます。
+      <span class="f">熱量[kW] = 流量[kg/s] × 4.186[kJ/(kg·℃)] × 温度差[℃]</span>
+      <span class="f">流量 = ${fmt(kw,1)} ÷ (4.186 × ${fmt(dt,1)}) = ${fmt(kw/(4.186*dt),3)} kg/s ＝ ${fmt(kw/(4.186*dt),3)} L/s<br>　× 60 = ${fmt(q,1)} L/min</span>
+      水1kg＝約1L として扱っています。温度差を大きくとるほど、同じ熱量でも流量が減り、配管を細くできます。</div>`];
     kv = `<div class="kv"><div class="k">${SYS_LABEL[s]}の流量</div><div class="v">${fmt(q,0)}<small>L/min</small></div></div>`;
   } else {
     q = num('hQ');
     $('hQm3').textContent = `= ${fmt(q*0.06,2)} ㎥/h`;
   }
-  renderSizeResult($('hvResult'), q, $('hPipe').value, num('hR',300), num('hV',2), kv, 'hvac');
+  renderSizeResult($('hvResult'), q, $('hPipe').value, num('hR',300), num('hV',2), kv, 'hvac', pre);
 }
 fillPipes('hPipe','hvac');
 ['hQ','hKw','hDt','hPipe','hR','hV'].forEach(id => $(id).addEventListener('input', calcHv));
 
-/* ---------- 計算根拠 ---------- */
+/* ---------- 解説（学習用） ---------- */
 $('infoBody').innerHTML = `
-<h2>給水・空調配管</h2>
-<p>・摩擦損失はヘーゼン・ウィリアムス式で計算：h = 10.67 × Q<sup>1.852</sup> ÷ (C<sup>1.852</sup> × D<sup>4.87</sup>)。Pa/mに換算して表示。</p>
-<p>・「摩擦損失の上限」と「流速の上限」を両方満たす、いちばん細い管を選定。初期値は300Pa/m・2.0m/s（画面で変更可）。</p>
-<p>・係数C：SGP=100、ライニング鋼管=130、SUS・樹脂管=140。内径はJIS寸法の代表値。</p>
-<p>・給水の同時使用流量は、器具給水負荷単位の合計から同時使用流量曲線（洗浄弁が多い／洗浄タンクが多い）で求める。</p>
-<p>・空調の能力からの流量：Q[L/min] = kW ÷ (4.186 × 温度差) × 60。</p>
-<h2 style="margin-top:14px">排水</h2>
-<p>・器具排水負荷単位の合計と、部位ごとの許容負荷単位の表で管径を決める（SHASE-S 206の考え方）。</p>
-<p>・大便器が接続される場合は75mm以上。75mmに接続できる大便器は2個まで。</p>
-<p>・3階建を超える立て管は、1本の合計と1階分（1ブランチ間隔）の両方を確認。</p>
-<h2 style="margin-top:14px">注意</h2>
-<p>・目安を出すためのツール。設計図・特記仕様書・元請の指示があればそちらを優先する。</p>
-<p>・表の数値はマスタ（MASTER）で管理。社内基準に合わせて冨田が更新する。</p>`;
+<div class="intro">このアプリは「答え（管径）」だけでなく、<b>なぜその太さになるのか</b>を学べるように作っています。
+計算結果の下の「<b>計算の流れを見る</b>」を開くと、今入れた数字で途中の計算を確認できます。ここでは、その考え方を順番に説明します。
+各章の最後の<span style="background:#F3E5F5;color:#6A1B9A;padding:0 6px;border-radius:4px">紫の枠</span>は、二級管工事施工管理技士の試験に出やすいポイントです。</div>
+
+<details><summary>① まず覚える言葉</summary><div class="body">
+<h3>流量（L/min・㎥/h）</h3>1分間（1時間）に管を流れる水の量。管径を決めるときの出発点。1 L/min ＝ 0.06 ㎥/h。
+<h3>流速（m/s）</h3>水が管の中を進む速さ。同じ流量なら、管が細いほど速くなる。<span class="f">流速 ＝ 流量 ÷ 管の断面積</span>
+速すぎると、音がうるさい・ウォーターハンマー（バルブを閉めたときのドンという衝撃）が起きやすい・管がすり減る（エロージョン）といった問題が出る。
+<h3>摩擦損失（Pa/m）</h3>水が管の内面とこすれて、管1mあたりに失う圧力。細い管ほど、流速が速いほど大きくなる。損失が大きいと、ポンプを大きくしないと水が届かない。
+<h3>負荷単位</h3>器具ごとの「水を使う量（流す量）の重み」。大便器（洗浄弁）は大量の水を一気に使うので大きく、手洗器は小さい。給水用と排水用で別の表がある。
+<h3>同時使用</h3>建物の器具を全部同時に使うことはまずない。器具が多いほど「同時に使う割合」は下がる。負荷単位の考え方はこれを表に織り込んだもの。
+<h3>呼び径と内径</h3>「25A」「50mm」などは<b>呼び径</b>（名前）。計算に使うのは実際の<b>内径</b>で、管種によって同じ呼び径でも内径が違う（ライニング鋼管は内側の樹脂の分だけ細い）。
+<div class="exam"><b>試験に出るポイント</b><br>・流速を上げすぎるとウォーターハンマーや騒音の原因になる。給水管の流速は一般に <b>2.0 m/s 以下</b>が目安。<br>・ウォーターハンマー対策：流速を下げる、急閉止しないバルブを使う、水撃防止器（ショックアブソーバー）を付ける。</div>
+</div></details>
+
+<details><summary>② 給水管の太さの決め方</summary><div class="body">
+給水は「どれだけの水が同時に流れるか」を見積もってから、その水を<b>無理なく流せる太さ</b>を選びます。
+<h3>手順</h3>
+<b>1. 器具給水負荷単位を合計する</b>　器具ごとの負荷単位 × 個数 を足す。公衆用（事務所・学校など、利用が集中する）と私室用（住宅など）で値が違う。<br>
+<b>2. 同時使用流量を求める</b>　合計の負荷単位から、同時使用流量のグラフ（曲線）で流量を読む。大便器が洗浄弁式か洗浄タンク式かで曲線が違う（洗浄弁は一度に大量に流すので流量が大きい）。<br>
+<b>3. 管径を選ぶ</b>　細い管から順に、流速と摩擦損失を計算し、両方が上限以内になった最初の太さに決める。
+<h3>このアプリの上限（初期値）</h3>流速 2.0 m/s 以下、摩擦損失 300 Pa/m 以下。現場や設計の考え方に合わせて画面で変えられる。
+<div class="tip"><b>現場のコツ</b>　器具の少ない末端は、計算より「器具の接続口径」で決まることが多い（洗面器15A、大便器洗浄弁25A など）。計算結果が接続口径より細く出ても、接続口径より細くはしない。</div>
+<div class="exam"><b>試験に出るポイント</b><br>・器具給水負荷単位による方法は、<b>同時使用流量</b>を求めるための方法。<br>・必要な水圧の目安：一般水栓 <b>30 kPa</b>、大便器洗浄弁 <b>70 kPa</b>。<br>・給水圧力が高すぎると器具が傷み、ウォーターハンマーも起きやすい（上限の目安は住宅・ホテルで300 kPa、事務所で400〜500 kPa 程度）。<br>・飲料水の配管は、他の配管と直接つながないこと（<b>クロスコネクションの禁止</b>）。</div>
+</div></details>
+
+<details><summary>③ 排水管の太さの決め方</summary><div class="body">
+排水は<b>重力で流す</b>のが給水との大きな違い。管の中は水と空気が一緒に流れるので、満水にしない太さを選ぶ。
+<h3>手順</h3>
+<b>1. 器具排水負荷単位を合計する</b>　器具ごとの値 × 個数を足す。<br>
+<b>2. 部位ごとの表で管径を決める</b>　横枝管・立て管・横主管で「流してよい負荷単位の上限」が違う。合計がおさまる、いちばん細い管を選ぶ。横主管は勾配がきついほど多く流せる。
+<h3>必ず守るルール</h3>
+<ul><li>大便器がつながる管は <b>75mm以上</b>。75mmにつなぐ大便器は2個まで。</li>
+<li>排水管は<b>下流に向かって細くしない</b>。</li>
+<li>横枝管は、つながる器具排水管のいちばん太い径以上にする。</li>
+<li>立て管は、いちばん下で必要な太さで、上から下まで同じ径にする。</li></ul>
+<h3>勾配の目安</h3>
+<table><tr><th>管径</th><th>最小勾配</th></tr><tr><td>65mm以下</td><td>1/50</td></tr><tr><td>75・100mm</td><td>1/100</td></tr><tr><td>125mm</td><td>1/150</td></tr><tr><td>150mm以上</td><td>1/200</td></tr></table>
+勾配がゆるすぎると汚物が残り、きつすぎると水だけ先に流れて汚物が残る。
+<div class="tip"><b>現場のコツ</b>　スリーブや梁貫通の位置で勾配が取れないことが多い。施工図の段階で、勾配を取ったときの末端の高さを必ず確認する。</div>
+<div class="exam"><b>試験に出るポイント</b><br>・横管の最小勾配：<b>65mm以下は1/50、75・100mmは1/100、125mmは1/150、150mm以上は1/200</b>。<br>・排水トラップの封水深は <b>5cm以上10cm以下</b>。二重トラップは禁止。<br>・通気管の役割：トラップの封水が切れる（破封）のを防ぎ、排水を流れやすくする。<br>・排水管は下流で縮径しない。</div>
+</div></details>
+
+<details><summary>④ 空調配管（冷水・温水・冷却水）の太さの決め方</summary><div class="body">
+空調の水配管は「熱を運ぶための水」。必要な熱量から流量を出し、その流量で管径を決める。
+<h3>熱量から流量を出す</h3>
+<span class="f">熱量[kW] ＝ 流量[kg/s] × 比熱 4.186[kJ/(kg·℃)] × 温度差[℃]</span>
+<span class="f">流量[L/min] ＝ 熱量[kW] ÷ (4.186 × 温度差) × 60</span>
+例：100kW、温度差5℃ → 100 ÷ (4.186 × 5) × 60 ＝ 約287 L/min。
+<h3>温度差の考え方</h3>冷水は 7℃で送って12℃で戻る（温度差5℃）のが一般的。温度差を大きくとれば流量が減り、配管もポンプも小さくできるが、機器の能力が落ちることがある。
+<h3>冷却水</h3>冷凍機の熱を冷却塔まで運ぶ水。運ぶ熱は「冷やした熱＋圧縮機の動力の熱」なので、冷凍能力より大きくなる。このアプリでは、凝縮器の放熱量を熱量として入れる。
+<h3>管径の選び方</h3>給水と同じく、流速と摩擦損失が上限以内になる最初の太さ。空調配管の摩擦損失は 300〜500 Pa/m 程度で設計することが多い。
+<div class="exam"><b>試験に出るポイント</b><br>・熱量 ＝ 流量 × 比熱 × 温度差 の計算はよく出る。水の比熱は約 <b>4.2 kJ/(kg·K)</b>。<br>・密閉回路（冷温水）には<b>膨張タンク</b>が必要（水の温度変化による体積の増減を吸収）。<br>・配管の空気だまりになる高い所には<b>空気抜き弁</b>、低い所には<b>排水弁（ドレン）</b>を付ける。</div>
+</div></details>
+
+<details><summary>⑤ 摩擦損失の計算式と管種の違い</summary><div class="body">
+このアプリは、水配管で広く使われる<b>ヘーゼン・ウィリアムス式</b>で摩擦損失を計算しています。
+<span class="f">h[m/m] ＝ 10.67 × Q<sup>1.852</sup> ÷ (C<sup>1.852</sup> × D<sup>4.87</sup>)</span>
+Q：流量[㎥/s]、D：内径[m]、C：流速係数（管の内面のなめらかさ）。h に 9,806.65 を掛けると Pa/m になる。
+<h3>式から分かること</h3>
+<ul><li>D が4.87乗で効くので、<b>1サイズ太くするだけで摩擦損失は大きく下がる</b>。</li>
+<li>流量が2倍になると、摩擦損失は約3.6倍（2の1.852乗）。</li>
+<li>C が大きい（なめらかな）管ほど損失が小さい。</li></ul>
+<h3>このアプリのC値</h3>
+<table><tr><th>管種</th><th>C</th><th>主な用途</th></tr>
+<tr><td>炭素鋼鋼管（SGP）</td><td>100</td><td>冷温水・冷却水</td></tr>
+<tr><td>ライニング鋼管（VLP）</td><td>130</td><td>給水</td></tr>
+<tr><td>ステンレス鋼管（SUS）</td><td>140</td><td>給水・給湯・冷温水</td></tr>
+<tr><td>HIVP・架橋ポリエチレン管</td><td>140</td><td>給水（住宅・小口径）</td></tr></table>
+鋼管は長く使うと内面がさびて C が下がる（流れにくくなる）ので、低めの値で計算しておく。
+<div class="exam"><b>試験に出るポイント</b><br>・管内の摩擦損失は、<b>管の長さに比例</b>し、<b>流速の約2乗に比例</b>、<b>管径に反比例</b>する（ダルシー・ワイスバッハ式の考え方）。<br>・ライニング鋼管の継手は、管端の腐食を防ぐ<b>管端防食継手</b>を使う。<br>・異なる金属をつなぐときは、<b>絶縁継手</b>で電食を防ぐ。</div>
+</div></details>
+
+<details><summary>⑥ このアプリを使うときの注意</summary><div class="body">
+<ul><li>出てくる管径は<b>目安</b>。設計図・特記仕様書・元請の指示があれば、そちらを優先する。</li>
+<li>表の数値（負荷単位・許容表・内径など）は一般的な代表値。社内基準に合わせて冨田が更新する。</li>
+<li>給水の末端は接続口径、排水は器具の排水口径より細くしない。</li>
+<li>迷ったら「計算の流れを見る」を開いて、どこで決まったのかを確認し、先輩に相談する。</li></ul>
+</div></details>`;
 
 /* ---------- 記録（メモリ上のみ・最大10件） ---------- */
 const REC_MAX = 10;
